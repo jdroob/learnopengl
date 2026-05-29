@@ -6,7 +6,7 @@
 #include <cstring>
 
 void framebuffer_size_callback(GLFWwindow *window, int width, int height) {
-    glViewport(0, 0, height, width);
+    glViewport(0, 0, width, height);
 }
 
 void processInput(GLFWwindow *window) {
@@ -34,7 +34,7 @@ int main(void) {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    GLFWwindow *window = glfwCreateWindow(800, 600, "John's First opengl window <3", NULL, NULL);
+    GLFWwindow *window = glfwCreateWindow(1600, 900, "John's First opengl window <3", NULL, NULL);
     if (!window) {
         fprintf(stderr, "Could not create a window </3\n");
         glfwTerminate();
@@ -48,11 +48,13 @@ int main(void) {
         return EXIT_FAILURE;
     }
 
-    glViewport(0, 0, 900, 1600);  // glViewport(LL_CORNER, HEIGHT, WIDTH)
+    glViewport(0, 0, 1600, 900);  // glViewport(LL_CORNER, WIDTH, HEIGHT)
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
 
-    unsigned VBO;  // vertex buffer object (wonder if this is like a file descriptor for the buffer?)
+    unsigned VBO, VAO;  // vertex buffer / array objects (wonder if this is like a file descriptor for the buffer / arrays?)
+    glGenVertexArrays(1, &VAO);
     glGenBuffers(1, &VBO); // create 1 new buffer and bind it to this unsigned int
+    glBindVertexArray(VAO);
     glBindBuffer(GL_ARRAY_BUFFER, VBO); // specifically, bind a buffer array
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW); // copy vertices from program mem to buffer
 
@@ -66,12 +68,12 @@ int main(void) {
     ;
 
     const char *fragmentShaderSource =
-    "#version 330 core\n"
-    "out vec4 FragColor;\n"
-    "void main()\n"
-    "{\n"
-    "   FragColor = vec4(1.0f, 0.5f, 0.2f, 1.0f);\n"
-    "}\0"
+        "#version 330 core\n"
+        "out vec4 FragColor;\n"
+        "void main()\n"
+        "{\n"
+        "   FragColor = vec4(1.0f, 0.5f, 0.2f, 1.0f);\n"
+        "}\0"
     ;
 
     unsigned vertexShader;
@@ -110,20 +112,79 @@ int main(void) {
         glGetProgramInfoLog(shaderProgram, 512, NULL, infoLog);
         std::cout << "ERROR::SHADER::PROGRAM::LINK_FAILED\n" << infoLog << std::endl;
     }
-    glUseProgram(shaderProgram);
+
+    /**
+     * At this point, we need to link our raw vertex data to openGL's 
+     * representation of vertexes.
+     * 
+     * Currently, our vertex buffer data is formatted as follows:
+     * 
+     *  float vertices[] = {
+     *       -0.5f, -0.5f, 0.f,
+     *       0.5f, -0.5f, 0.f,
+     *       0.0f,  0.5f, 0.f,
+     *   };
+     * 
+     * So in memory, we have:
+     * 
+     * VERTEX 0:
+     * bytes_0:3 -0.5f
+     * bytes_4:7 -0.5f
+     * bytes_8:11 0.0f
+     * 
+     * VERTEX 1:
+     * bytes_12:15 0.5f
+     * bytes_16:19 -0.5f
+     * bytes_20:23 0.0f
+     * 
+     * VERTEX 2:
+     * bytes_24:27 0.0f
+     * bytes_28:31 0.5f
+     * bytes_32:35 0.0f
+     */
+     
+     /**
+      * Discussion of below functions
+      *     glVertexAttribPointer
+      *         param 0: the vertexx attribute we want to configure
+      *                  In vertex shader, we specified the location of the `position`
+      *                  vertex attirbute with layout = 0.
+      *                  So to pass the location of the vertexes, we need to specify `position` via
+      *                  attribute 0
+      * 
+      *         param 1: size of the vertex attrribute. We're passing 3 vertices so we pass in 3.
+      *         param 2: type of the data provided (float)
+      *                  Note that vec* is same as float* in GLSL
+      * 
+      *         param 3: this arg is a boolean asking if we want the data to be normalized (to 0 or 1)
+      *                  need to look in to this further at some point
+      * 
+      *         param 4: stride - the space between contiguous vertex attributes
+      *                  in this case, a new vertex is found every 3 * sizeof(float) bytes
+      * 
+      *         param 5: the offset of where the vertex data begins in the buffer
+      *                  data begins at offset 0
+      *                  arg is of type void* so we cast to avoid implicit conversion warnings
+      */
+     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+     glEnableVertexAttribArray(0);
 
     // this is the render loop
     while (!glfwWindowShouldClose(window)) {
-        // each iteration around the render loop is called a frame
-
-        // process user input
-        processInput(window);
 
         // render
         /// note: this is a state *setting* function
         glClearColor(0.2f, 0.3f, 0.3f, 1.0);    // rgba color to use on clear
         /// note: this is a state *using* function
         glClear(GL_COLOR_BUFFER_BIT);   // specify we want to clear the color buffer
+
+        glUseProgram(shaderProgram);
+        glBindVertexArray(VAO);
+        glDrawArrays(GL_TRIANGLES, 0, 3);
+        // each iteration around the render loop is called a frame
+
+        // process user input
+        processInput(window);
 
         // swap front and back buffers (2 buffers minimize flickering)
         glfwSwapBuffers(window);
