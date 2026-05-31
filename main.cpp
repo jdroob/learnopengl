@@ -20,10 +20,27 @@ void processInput(GLFWwindow *window) {
  * Note these coordinates are Normalized Device Coordinates (NDC)
  * aka they're coordinates sitting on the 2x2 viewport
  */
+// float vertices[] = {
+//     -0.5f, -0.5f, 0.f,
+//      0.5f, -0.5f, 0.f,
+//      0.0f,  0.5f, 0.f,
+// };
+
+// vertices of a rectangle
+// can also be thought of vertices of 2 triangles
+// that share 2 vertices
+// triangle 0: vertex0, vertex1, vertex3
+// triangle 1: vertex1, vertex2, vertex3
 float vertices[] = {
-    -0.5f, -0.5f, 0.f,
-     0.5f, -0.5f, 0.f,
-     0.0f,  0.5f, 0.f,
+    0.5f, 0.5f, 0.0f,    // top right
+    0.5f, -0.5f, 0.0f,   // bottom right
+    -0.5f, -0.5f, 0.0f,  // bottom left
+    -0.5f, 0.5f, 0.0f,   // top left
+};
+
+unsigned indices[] = {
+    0, 1, 3,  // triangle 0
+    1, 2, 3   // triangle 1
 };
 
 int main(void) {
@@ -34,6 +51,7 @@ int main(void) {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
+    // configure window object
     GLFWwindow *window = glfwCreateWindow(1600, 900, "John's First opengl window <3", NULL, NULL);
     if (!window) {
         fprintf(stderr, "Could not create a window </3\n");
@@ -43,6 +61,7 @@ int main(void) {
 
     glfwMakeContextCurrent(window);
 
+    // load gl via glad
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
         fprintf(stderr, "Failed to initialize GLAD :(\n");
         return EXIT_FAILURE;
@@ -51,13 +70,19 @@ int main(void) {
     glViewport(0, 0, 1600, 900);  // glViewport(LL_CORNER, WIDTH, HEIGHT)
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
 
-    unsigned VBO, VAO;  // vertex buffer / array objects (wonder if this is like a file descriptor for the buffer / arrays?)
+    // allocate containers using openGL interface
+    // move vertex / index data into appropriate containers
+    unsigned VBO, VAO, EBO;  // vertex buffer / array / element buffer objects (wonder if this is like a file descriptor for the buffer / arrays?)
     glGenVertexArrays(1, &VAO);
     glGenBuffers(1, &VBO); // create 1 new buffer and bind it to this unsigned int
     glBindVertexArray(VAO);
     glBindBuffer(GL_ARRAY_BUFFER, VBO); // specifically, bind a buffer array
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW); // copy vertices from program mem to buffer
+    glGenBuffers(1, &EBO);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW); // copy vertices from program mem to buffer
 
+    // write basic vertex / fragment shaders
     const char *vertexShaderSource = 
         "#version 330 core\n"
         "layout (location = 0) in vec3 aPos;\n"
@@ -169,6 +194,49 @@ int main(void) {
      glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
      glEnableVertexAttribArray(0);
 
+     /**
+      * What if we want to render a rectangle instead of a triangle?
+      * 
+      * We *can* draw a rectangle using 2 triangles
+      * float vertices[] = {
+      *     // first triangle
+      *     0.5f, 0.5f, 0.0f,   // top right
+      *     0.5f, -0.5f, 0.0f,  // bottom right
+      *     -0.5f, 0.5f, 0.0f,  // top left
+      *     // second triangle
+      *     0.5f, -0.5f, 0.0f,  // bottom right (dupe)
+      *     -0.5f, -0.5f, 0.0f, // bottom left
+      *     -0.5f, 0.5f, 0.0f,  // top left (dupe)
+      * };
+      * 
+      * In this small example, we already have 50% more vertices than we need (need 4, have 6).
+      * This problem gets worse as the complexity of the mesh increases.
+      * It would be far more efficient to only store the unique vertices.
+      * 
+      * This is where Element Buffer Objects (EBO's) come into play.
+      * As the name implies, these objects are buffers. The difference is we
+      * can supply 2 inputs that allow us to remove redundancies.
+      *     input0: list of unique vertices
+      *     input1: order in which to draw each triangle
+      * 
+      * e.g.
+      *     float vertices[] = {
+      *         0.5f, 0.5f, 0.0f,    // top right
+      *         0.5f, -0.5f, 0.0f,   // bottom right
+      *         -0.5f, -0.5f, 0.0f,  // bottom left
+      *         -0.5f, 0.5f, 0.0f,   // top left
+      *     };
+      * 
+      *     unsigned indices[] = {
+      *         0, 1, 2,  // triangle 0
+      *         1, 2, 3   // triangle 1
+      *     };
+      * 
+      *     Note: the above approach is known as **indexed drawing**.
+      */
+
+
+
     // this is the render loop
     while (!glfwWindowShouldClose(window)) {
 
@@ -178,10 +246,11 @@ int main(void) {
         /// note: this is a state *using* function
         glClear(GL_COLOR_BUFFER_BIT);   // specify we want to clear the color buffer
 
+        // fun fact: each iteration around the render loop is called a frame
         glUseProgram(shaderProgram);
         glBindVertexArray(VAO);
-        glDrawArrays(GL_TRIANGLES, 0, 3);
-        // each iteration around the render loop is called a frame
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, (void*)0);
+        glBindVertexArray(0);
 
         // process user input
         processInput(window);
